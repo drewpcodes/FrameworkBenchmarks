@@ -1,42 +1,33 @@
-import zhttp.http._
-import zhttp.service.Server
-import zio.{App, ExitCode, URIO}
-import com.github.plokhotnyuk.jsoniter_scala.macros._
-import com.github.plokhotnyuk.jsoniter_scala.core._
-import zhttp.http.Response
+import com.github.plokhotnyuk.jsoniter_scala.core.{JsonValueCodec, writeToString}
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+import zio._
+import zio.http._
 
-import java.time.format.DateTimeFormatter
-import java.time.{Instant, ZoneOffset}
+final case class Message(message: String)
 
-case class Message(message: String)
-
-object Main extends App {
-  val message: String                         = "Hello, World!"
+object Main extends ZIOAppDefault {
+  private final val message                         = "Hello, World!"
   implicit val codec: JsonValueCodec[Message] = JsonCodecMaker.make
+  private final val plainText: Route[Any, Nothing] = Method.GET / "plaintext" -> handler(Response.text(message))
+  private final val json: Route[Any, Nothing] = Method.GET / "json" -> handler(Response.json(writeToString(Message(message))))
 
-  val app: Http[Any, HttpError, Request, Response] = Http.collect[Request] {
-    case Method.GET -> Root / "plaintext" =>
-      Response.http(
-        content = HttpContent.Complete(message),
-        headers = Header.contentTypeTextPlain :: headers(),
-      )
-    case Method.GET -> Root / "json"      =>
-      Response.http(
-        content = HttpContent.Complete(writeToString(Message(message))),
-        headers = Header.contentTypeJson :: headers(),
-      )
-  }
+  private final val routes: Routes[Any, Response] =
+    // List of all the routes
+    Routes(plainText, json)
+      // Handle all unhandled errors
+      .handleError(Response.internalServerError)
 
-  override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = Server.start(8080, app).exitCode
+  // Serving the routes using the default server layer on port 8080
+  def run = Server.serve(routes).provide(Server.defaultWithPort(8080))
 
-  val formatter: DateTimeFormatter                = DateTimeFormatter.RFC_1123_DATE_TIME.withZone(ZoneOffset.UTC)
-  val constantHeaders: List[Header]               = Header("server", "zio-http") :: Nil
-  @volatile var lastHeaders: (Long, List[Header]) = (0, Nil)
-
-  def headers(): List[Header] = {
-    val t = System.currentTimeMillis()
-    if (t - lastHeaders._1 >= 1000)
-      lastHeaders = (t, Header("date", formatter.format(Instant.ofEpochMilli(t))) :: constantHeaders)
-    lastHeaders._2
-  }
+// TODO:
+//  val formatter: DateTimeFormatter                = DateTimeFormatter.RFC_1123_DATE_TIME.withZone(ZoneOffset.UTC)
+//  val constantHeaders: List[Header]               = Header("server", "zio-http") :: Nil
+//  @volatile var lastHeaders: (Long, List[Header]) = (0, Nil)
+//  def headers(): List[Header] = {
+//    val t = System.currentTimeMillis()
+//    if (t - lastHeaders._1 >= 1000)
+//      lastHeaders = (t, Header("date", formatter.format(Instant.ofEpochMilli(t))) :: constantHeaders)
+//    lastHeaders._2
+//  }
 }

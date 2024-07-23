@@ -1,4 +1,4 @@
-FROM hseeberger/scala-sbt:11.0.12_1.5.5_2.13.6
+FROM sbtscala/scala-sbt:eclipse-temurin-jammy-21.0.2_13_1.10.1_2.13.14
 
 WORKDIR /zhttp
 COPY src src
